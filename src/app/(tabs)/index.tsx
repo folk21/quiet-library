@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
-import { ArrowRight, BookMarked, Compass, Hash, Search, Sparkles } from 'lucide-react-native';
+import { ArrowRight, BookMarked, Compass, Hash, Search } from 'lucide-react-native';
 import { ActionButton, BookInput, ErrorText, Screen, SectionLabel } from '../../components/Ui';
 import { api } from '../../lib/api';
 import type { CatalogStats } from '../../lib/types';
@@ -37,26 +37,26 @@ export default function DiscoverScreen() {
   return <Screen>
     <View style={[styles.hero, wide && styles.heroWide]}>
       <View style={styles.heroCopy}>
-        <View style={styles.heroEyebrow}><View style={styles.eyebrowDot} /><Text style={common.eyebrow}>НЕСПЕШНЫЙ ИНТЕРНЕТ</Text></View>
-        <Text style={[styles.heroTitle, wide && { fontSize: 56, lineHeight: 65 }]}>У каждой жизни{ '\n' }<Text style={styles.italic}>есть страницы.</Text></Text>
-        <Text style={styles.heroDescription}>Здесь нет бесконечной ленты и случайного шума. Только люди, их мысли и тихая радость находить что-то настоящее.</Text>
+        <View style={styles.heroEyebrow}><View style={styles.eyebrowDot} /><Text style={common.eyebrow}>БИБЛИОТЕКА АВТОРОВ</Text></View>
+        <Text style={[styles.heroTitle, wide && { fontSize: 56, lineHeight: 65 }]}>Люди и их{ '\n' }<Text style={styles.italic}>тексты.</Text></Text>
+        <Text style={styles.heroDescription}>Публикуйте записи, открывайте страницы по номеру и сохраняйте авторов в личный блокнот. Здесь нет ленты, лайков и подписчиков.</Text>
         <View style={styles.pills}>
-          <Text style={styles.pill}>без алгоритмов</Text><Text style={styles.pill}>без оценок</Text><Text style={styles.pill}>только слова</Text>
+          <Text style={styles.pill}>публикации</Text><Text style={styles.pill}>поиск по номеру</Text><Text style={styles.pill}>личный блокнот</Text>
         </View>
       </View>
       <Pressable onPress={() => router.push('/page/56')} style={styles.bookPreview} accessibilityRole="button" accessibilityLabel="Открыть страницу 56">
-        <View style={styles.previewMark}><Text style={styles.previewMarkText}>КАТАЛОГ · ТОМ I</Text><Sparkles color={palette.accent} size={18} strokeWidth={1.3} /></View>
+        <View style={styles.previewMark}><Text style={styles.previewMarkText}>ПРИМЕР СТРАНИЦЫ</Text><BookMarked color={palette.accent} size={18} strokeWidth={1.3} /></View>
         <View style={styles.previewCircle}><BookMarked color={palette.forest} size={27} strokeWidth={1.2} /></View>
         <Text style={styles.previewNumber}>{pageNumber(56)}</Text>
         <Text style={styles.previewName}>Ева Белая</Text>
-        <Text style={styles.previewQuote}>«Иногда хочется, чтобы у вещей было место, куда возвращаться»</Text>
+        <Text style={styles.previewDescription}>Городские прогулки, архивные находки и заметки о повседневности.</Text>
         <View style={styles.previewBottom}><Text style={styles.previewBottomText}>ПОСМОТРЕТЬ СТРАНИЦУ</Text><ArrowRight size={18} color={palette.forest} /></View>
       </Pressable>
     </View>
 
     <View style={styles.findSection}>
       <SectionLabel text="01 / Найти страницу" trailing="По номеру из каталога" />
-      <Text style={styles.findTitle}>Есть номер? Найдём его.</Text>
+      <Text style={styles.findTitle}>Поиск по номеру</Text>
       <View style={[styles.searchRow, !wide && { flexDirection: 'column' }]}>
         <View style={styles.searchWrap}><Search size={20} color={palette.moss} strokeWidth={1.7} /><BookInput value={query} onChangeText={setQuery} placeholder="Например, 0056" keyboardType="numeric" style={styles.searchInput} /></View>
         <ActionButton title="Найти страницу" icon={ArrowRight} onPress={goToNumber} style={wide ? { minWidth: 190 } : { width: '100%' }} />
@@ -67,25 +67,25 @@ export default function DiscoverScreen() {
     <View style={[styles.randomCard, wide && { flexDirection: 'row', alignItems: 'center' }]}>
       <View style={styles.randomIcon}><Compass size={27} color={palette.forest} strokeWidth={1.35} /></View>
       <View style={{ flex: 1 }}>
-        <Text style={styles.randomEyebrow}>ИЛИ ДОВЕРЬТЕСЬ СЛУЧАЮ</Text>
-        <Text style={styles.randomTitle}>Отправиться на прогулку</Text>
-        <Text style={styles.randomText}>Откройте одну случайную страницу. Возможно, вы встретите мысли, которые давно искали.</Text>
+        <Text style={styles.randomEyebrow}>СЛУЧАЙНЫЙ АВТОР</Text>
+        <Text style={styles.randomTitle}>Открыть случайную страницу</Text>
+        <Text style={styles.randomText}>Если номера нет, можно выбрать страницу случайным образом и прочитать публикации её автора.</Text>
       </View>
-      <ActionButton title="Удивить меня" icon={ArrowRight} variant="secondary" loading={busy} onPress={openRandom} style={wide ? { minWidth: 167 } : { marginTop: 18 }} />
+      <ActionButton title="Открыть" icon={ArrowRight} variant="secondary" loading={busy} onPress={openRandom} style={wide ? { minWidth: 167 } : { marginTop: 18 }} />
     </View>
 
     <View style={styles.principles}>
       <SectionLabel text="02 / Как устроена библиотека" trailing="Простые правила" />
       <View style={[styles.principlesRow, !wide && { flexDirection: 'column' }]}>
-        <View style={styles.principle}><View style={styles.principleIcon}><Hash size={21} color={palette.accent} /></View><Text style={styles.principleTitle}>Свой номер</Text><Text style={styles.principleBody}>У каждого автора есть постоянный адрес — маленькое место в общей библиотеке.</Text></View>
-        <View style={styles.principle}><View style={styles.principleIcon}><BookMarked size={21} color={palette.accent} /></View><Text style={styles.principleTitle}>Личный блокнот</Text><Text style={styles.principleBody}>Сохраняйте интересных людей и добавляйте заметки, которые увидите только вы.</Text></View>
-        <View style={styles.principle}><View style={styles.principleIcon}><Compass size={21} color={palette.accent} /></View><Text style={styles.principleTitle}>Свой маршрут</Text><Text style={styles.principleBody}>Никаких рекомендаций ради охватов. Только ваше любопытство и время.</Text></View>
+        <View style={styles.principle}><View style={styles.principleIcon}><Hash size={21} color={palette.accent} /></View><Text style={styles.principleTitle}>Постоянный номер</Text><Text style={styles.principleBody}>Каждый пользователь получает числовой адрес страницы, который не меняется.</Text></View>
+        <View style={styles.principle}><View style={styles.principleIcon}><BookMarked size={21} color={palette.accent} /></View><Text style={styles.principleTitle}>Личный блокнот</Text><Text style={styles.principleBody}>Сохраняйте авторов и добавляйте приватные заметки к их страницам.</Text></View>
+        <View style={styles.principle}><View style={styles.principleIcon}><Compass size={21} color={palette.accent} /></View><Text style={styles.principleTitle}>Без ленты</Text><Text style={styles.principleBody}>Авторы находятся по номеру или случайным выбором. Рекомендаций нет.</Text></View>
       </View>
     </View>
     <View style={styles.ending}>
-      <Text style={styles.endingEyebrow}>КАРТОТЕКА ОТКРЫТА</Text>
-      <Text style={styles.endingTitle}>{stats ? `${stats.pages} историй ждут своего читателя` : 'Каждая страница ждёт читателя'}</Text>
-      <Text style={styles.endingDescription}>Можно просто читать. А можно однажды оставить в библиотеке свою историю.</Text>
+      <Text style={styles.endingEyebrow}>КАТАЛОГ</Text>
+      <Text style={styles.endingTitle}>{stats ? `${stats.pages} авторов · ${stats.posts} публикаций` : 'Читайте и публикуйте тексты'}</Text>
+      <Text style={styles.endingDescription}>Просмотр доступен всем. Для публикации текстов и личного блокнота нужна регистрация.</Text>
       <ActionButton title="Создать свою страницу" variant="secondary" onPress={() => router.push('/auth?mode=register')} icon={ArrowRight} style={{ alignSelf: 'flex-start', marginTop: 22 }} />
     </View>
   </Screen>;
@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
   previewCircle: { alignSelf: 'center', height: 70, width: 70, borderRadius: 35, borderWidth: 1, borderColor: '#B7C2B4', alignItems: 'center', justifyContent: 'center', marginTop: 17 },
   previewNumber: { fontFamily: font.serif, fontSize: 36, textAlign: 'center', color: palette.forest, marginTop: 6 },
   previewName: { fontFamily: font.serif, fontSize: 20, color: palette.ink, textAlign: 'center' },
-  previewQuote: { fontFamily: font.serif, fontStyle: 'italic', fontSize: 14, color: palette.inkSoft, lineHeight: 23, textAlign: 'center', marginTop: 7 },
+  previewDescription: { fontFamily: font.sans, fontSize: 14, color: palette.inkSoft, lineHeight: 23, textAlign: 'center', marginTop: 7 },
   previewBottom: { borderTopWidth: 1, borderTopColor: '#C5CFC1', marginTop: 15, paddingTop: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   previewBottomText: { fontSize: 10, color: palette.forest, letterSpacing: 1.6, fontWeight: '700' },
   findSection: { borderTopWidth: 1, borderTopColor: palette.border, paddingTop: 31, paddingBottom: 36 },

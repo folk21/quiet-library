@@ -56,7 +56,7 @@ export default function ReaderScreen() {
       </View>
       <View style={styles.posts}>
         <SectionLabel text="Заметки автора" trailing={`${page.posts.length} публикаций`} />
-        {page.posts.length === 0 ? <EmptyState title="Здесь пока тихо" message="Автор ещё не оставил первую запись. Иногда историям нужно время." /> : page.posts.map((post) => <PostCard key={post.id} post={post} onEdit={user?.id === page.user.id ? () => router.push({ pathname: '/write', params: { id: String(post.id) } }) : undefined} />)}
+        {page.posts.length === 0 ? <EmptyState title="Публикаций пока нет" message="Автор ещё ничего не опубликовал." /> : page.posts.map((post) => <PostCard key={post.id} post={post} onEdit={user?.id === page.user.id ? () => router.push({ pathname: '/write', params: { id: String(post.id) } }) : undefined} />)}
       </View>
       <ErrorText message={page && error} />
     </>}

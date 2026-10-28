@@ -55,13 +55,13 @@ export default function ComposeScreen() {
       <ActionButton title="Вернуться без сохранения" icon={ArrowLeft} variant="quiet" onPress={() => router.back()} style={{ alignSelf: 'flex-start', paddingHorizontal: 0 }} />
       {sessionLoading || loading ? <ActivityIndicator color={palette.forest} style={{ marginTop: 50 }} /> : !user ?
         <View style={{ marginTop: 50 }}><Text style={styles.title}>Чтобы писать, нужно войти.</Text><ActionButton title="Войти" onPress={() => router.push('/auth')} style={{ marginTop: 20 }} /></View> : <>
-          <View style={styles.top}><Feather size={22} color={palette.accent} strokeWidth={1.4} /><Text style={common.eyebrow}>{postId ? 'РЕДАКТИРОВАНИЕ ЗАПИСИ' : 'НОВАЯ СТРАНИЦА В ВАШЕЙ ИСТОРИИ'}</Text></View>
-          <Text style={styles.title}>{postId ? 'Вернуться к словам.' : 'Начните с мысли.'}</Text>
-          <Text style={styles.intro}>Текст не должен быть идеальным. Иногда самые важные мысли звучат тихо.</Text>
+          <View style={styles.top}><Feather size={22} color={palette.accent} strokeWidth={1.4} /><Text style={common.eyebrow}>{postId ? 'РЕДАКТИРОВАНИЕ' : 'НОВАЯ ПУБЛИКАЦИЯ'}</Text></View>
+          <Text style={styles.title}>{postId ? 'Редактировать текст' : 'Новая публикация'}</Text>
+          <Text style={styles.intro}>Добавьте заголовок и текст до 30 000 символов. Публикация будет видна всем посетителям вашей страницы.</Text>
           <View style={styles.form}>
             <Text style={styles.label}>ЗАГОЛОВОК</Text><BookInput value={title} onChangeText={setTitle} placeholder="О чём эта запись?" style={styles.titleInput} />
             <Text style={[styles.label, { marginTop: 17 }]}>ВАШ ТЕКСТ</Text>
-            <BookInput multiline value={content} onChangeText={setContent} placeholder="Здесь можно немного замедлиться и просто писать..." style={styles.contentInput} />
+            <BookInput multiline value={content} onChangeText={setContent} placeholder="Введите текст публикации..." style={styles.contentInput} />
             <Text style={styles.helper}>Обычный текст. Для нового абзаца оставьте пустую строку.</Text>
             <ErrorText message={error} />
             <View style={styles.actions}>

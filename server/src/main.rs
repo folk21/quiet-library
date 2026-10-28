@@ -23,6 +23,8 @@ use tower_http::{
 use tracing::{info, warn};
 use uuid::Uuid;
 
+mod seed;
+
 #[derive(Clone)]
 struct AppState {
     pool: SqlitePool,
@@ -228,10 +230,10 @@ fn validate_post(input: &PostInput) -> ApiResult<()> {
     if input.title.trim().is_empty()
         || input.title.chars().count() > 140
         || input.content.trim().is_empty()
-        || input.content.chars().count() > 20_000
+        || input.content.chars().count() > 30_000
     {
         return Err(ApiError::bad(
-            "Заголовок должен быть не длиннее 140 символов, а текст — не длиннее 20 000.",
+            "Заголовок должен быть не длиннее 140 символов, а текст — не длиннее 30 000.",
         ));
     }
     Ok(())
@@ -270,7 +272,7 @@ async fn register(
     .bind(name)
     .bind(email)
     .bind(hash)
-    .bind("Новая история в библиотеке.")
+    .bind("Публикации и заметки автора.")
     .execute(&state.pool)
     .await;
     let result = match outcome {
@@ -541,64 +543,6 @@ fn app(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
-async fn seed_demo(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
-        .fetch_one(pool)
-        .await?;
-    if count.0 > 0 {
-        return Ok(());
-    }
-    let authors = [
-        (
-            56,
-            "Ева Белая",
-            "Записываю маленькие происшествия, города и тишину между словами.",
-            "О вещах, которые остаются",
-            "Вчера я нашла в кармане старого пальто билет на поезд. Станция отправления давно закрыта, а поезд, наверное, больше не ходит.\n\nМне кажется, память похожа на маленький вокзал. Некоторые люди приезжают ненадолго, другие остаются ждать на скамейке. И есть те, чьи имена мы узнаём только по выцветшим билетам.",
-        ),
-        (
-            207,
-            "Марк Ясный",
-            "Наблюдения из поездов, старые книги и разговоры с незнакомцами.",
-            "География случайных встреч",
-            "В ночном поезде сосед по купе рассказал, что всю жизнь восстанавливает старые радиоприёмники. Он говорил о них так, как обычно говорят о близких друзьях.\n\nИногда несколько часов рядом с незнакомцем позволяют увидеть больше, чем месяцы привычных разговоров.",
-        ),
-        (
-            314,
-            "Ася Гордеева",
-            "Ботаника, мокрые улицы и попытки замечать хорошее.",
-            "Сад без адреса",
-            "Мне нравится находить растения в самых неподходящих местах: между плитами старого двора, у заборов, в трещинах асфальта.\n\nНикто не просил их расти именно здесь. И всё же каждое утро они продолжают свою тихую работу.",
-        ),
-        (
-            721,
-            "Никита Северин",
-            "Заметки о музыке, архитектуре и памяти.",
-            "Город в миноре",
-            "Есть здания, мимо которых мы проходим каждый день и никогда не поднимаем голову.\n\nОднажды я остановился под старым балконом и увидел маленькую вырезанную звезду.",
-        ),
-        (
-            1128,
-            "Лия Рейн",
-            "Живу у моря. Сохраняю слова, которые не хочется терять.",
-            "Море ещё спит",
-            "В шесть утра на берегу почти никого нет. Вода кажется темнее неба, а чайки делают вид, что город принадлежит только им.\n\nЯ хожу сюда без телефона.",
-        ),
-    ];
-    for (id, name, bio, title, content) in authors {
-        sqlx::query("INSERT INTO users (id, display_name, email, password_hash, bio, is_demo) VALUES (?, ?, ?, ?, ?, 1)")
-            .bind(id).bind(name).bind(format!("demo-{id}@invalid.local"))
-            .bind("!disabled-demo-account").bind(bio).execute(pool).await?;
-        sqlx::query("INSERT INTO posts (author_id, title, content) VALUES (?, ?, ?)")
-            .bind(id)
-            .bind(title)
-            .bind(content)
-            .execute(pool)
-            .await?;
-    }
-    Ok(())
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
@@ -618,8 +562,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .connect_with(options)
         .await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
-    if std::env::var("DEMO_SEED").unwrap_or_default() == "true" {
-        seed_demo(&pool).await?;
+    if std::env::var("DEMO_SEED").unwrap_or_else(|_| "true".to_owned()) == "true" {
+        seed::seed_demo(&pool).await?;
     }
     let address: SocketAddr = std::env::var("API_BIND")
         .unwrap_or_else(|_| "127.0.0.1:3001".to_owned())
@@ -690,6 +634,72 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::OK);
         value
+    }
+
+    #[tokio::test]
+    async fn seed_adds_ten_demo_authors_and_forty_posts_only_once() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        sqlx::query("INSERT INTO users (id, display_name, email, password_hash, bio) VALUES (1888, 'Existing User', 'real@example.test', 'hash', '')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO users (id, display_name, email, password_hash, bio, is_demo) VALUES (56, 'Ева Белая', 'demo-56@invalid.local', '!disabled-demo-account', '', 1)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO posts (author_id, title, content) VALUES (56, 'О вещах, которые остаются', 'Legacy fixture')")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        seed::seed_demo(&pool).await.unwrap();
+        seed::seed_demo(&pool).await.unwrap();
+
+        let authors: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE is_demo = 1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let posts: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM posts p JOIN users u ON p.author_id = u.id WHERE u.is_demo = 1",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let long_posts: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM posts WHERE length(content) BETWEEN 20000 AND 30000",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let legacy: String = sqlx::query_scalar(
+            "SELECT content FROM posts WHERE author_id = 56 AND title = 'О вещах, которые остаются'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let real: String = sqlx::query_scalar("SELECT display_name FROM users WHERE id = 1888")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let min_posts_per_author: i64 = sqlx::query_scalar(
+            "SELECT MIN(post_count) FROM (SELECT COUNT(*) AS post_count FROM posts p JOIN users u ON p.author_id = u.id WHERE u.is_demo = 1 GROUP BY p.author_id)",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        assert_eq!(authors, 10);
+        assert_eq!(posts, 40);
+        assert_eq!(long_posts, 2);
+        assert_eq!(legacy, "Legacy fixture");
+        assert_eq!(real, "Existing User");
+        assert_eq!(min_posts_per_author, 4);
     }
 
     #[tokio::test]

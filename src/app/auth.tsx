@@ -31,9 +31,9 @@ export default function AuthScreen() {
     <View style={styles.container}>
       <ActionButton title="Вернуться к каталогу" icon={ArrowLeft} variant="quiet" onPress={() => router.back()} style={{ alignSelf: 'flex-start', paddingHorizontal: 0 }} />
       <View style={styles.badge}><Feather size={23} color={palette.forest} strokeWidth={1.45} /></View>
-      <Text style={common.eyebrow}>{isRegister ? 'ВАША ИСТОРИЯ НАЧИНАЕТСЯ ЗДЕСЬ' : 'С ВОЗВРАЩЕНИЕМ'}</Text>
-      <Text style={styles.title}>{isRegister ? 'Займите место\nна полке.' : 'Снова среди\nстраниц.'}</Text>
-      <Text style={styles.subtitle}>{isRegister ? 'Создайте свою страницу и начните писать. Номер останется с вами навсегда.' : 'Войдите, чтобы продолжить писать и открыть личный блокнот.'}</Text>
+      <Text style={common.eyebrow}>{isRegister ? 'РЕГИСТРАЦИЯ' : 'АВТОРИЗАЦИЯ'}</Text>
+      <Text style={styles.title}>{isRegister ? 'Создать страницу' : 'Войти в аккаунт'}</Text>
+      <Text style={styles.subtitle}>{isRegister ? 'Укажите имя, email и пароль. После регистрации получите постоянный номер страницы.' : 'Войдите, чтобы управлять публикациями и открывать личный блокнот.'}</Text>
       <View style={styles.form}>
         {isRegister && <View style={styles.field}><Text style={styles.label}>ИМЯ АВТОРА</Text><BookInput value={displayName} onChangeText={setDisplayName} placeholder="Как вас называть?" autoCapitalize="words" /></View>}
         <View style={styles.field}><Text style={styles.label}>ЭЛЕКТРОННАЯ ПОЧТА</Text><BookInput value={email} onChangeText={setEmail} placeholder="you@example.com" keyboardType="email-address" autoCapitalize="none" /></View>

@@ -23,13 +23,13 @@ export default function MyPageScreen() {
 
   if (loading) return <Screen><ActivityIndicator color={palette.forest} /></Screen>;
   if (!user) return <Screen>
-    <View style={{ marginTop: 24 }}><Text style={common.eyebrow}>ВАШ ТОМ ЕЩЁ НЕ НА ПОЛКЕ</Text><Text style={styles.heroTitle}>Каждой истории{ '\n' }нужно место.</Text><Text style={styles.intro}>Создайте собственную страницу и оставьте первые строки. Они будут ждать читателя, который однажды найдёт ваш номер.</Text></View>
-    <EmptyState title="Ваша страница ждёт вас" message="Войдите или зарегистрируйтесь, чтобы писать в библиотеке." action="Создать страницу" onAction={() => router.push('/auth?mode=register')} />
+    <View style={{ marginTop: 24 }}><Text style={common.eyebrow}>ЛИЧНЫЙ КАБИНЕТ</Text><Text style={styles.heroTitle}>Моя страница</Text><Text style={styles.intro}>Зарегистрируйтесь, чтобы публиковать тексты под своим постоянным номером.</Text></View>
+    <EmptyState title="Аккаунт не создан" message="Войдите или зарегистрируйтесь, чтобы управлять публикациями." action="Создать страницу" onAction={() => router.push('/auth?mode=register')} />
     <ActionButton title="У меня уже есть страница" variant="quiet" onPress={() => router.push('/auth')} style={{ alignSelf: 'center', marginTop: 15 }} />
   </Screen>;
 
   return <Screen>
-    <View style={styles.personalHead}><View><Text style={common.eyebrow}>ЛИЧНЫЙ КАБИНЕТ · ВАШ ТОМ</Text><Text style={styles.heroTitle}>Моя страница</Text></View>
+    <View style={styles.personalHead}><View><Text style={common.eyebrow}>ЛИЧНЫЙ КАБИНЕТ</Text><Text style={styles.heroTitle}>Моя страница</Text></View>
       <ActionButton title="Выйти" variant="quiet" icon={LogOut} onPress={async () => { await signOut(); router.replace('/'); }} />
     </View>
     <View style={styles.identity}>
@@ -46,7 +46,7 @@ export default function MyPageScreen() {
       <SectionLabel text="Мои публикации" trailing={`${page?.posts.length ?? 0} записей`} />
       <ErrorText message={error} />
       {!page ? <ActivityIndicator color={palette.forest} style={{ marginTop: 30 }} /> : page.posts.length === 0 ?
-        <EmptyState title="Чистая страница" message="Не обязательно писать много. Иногда одной честной заметки достаточно." action="Начать писать" onAction={() => router.push('/write')} /> :
+        <EmptyState title="Пока нет публикаций" message="Создайте первую запись, чтобы она появилась на вашей странице." action="Начать писать" onAction={() => router.push('/write')} /> :
         page.posts.map((post) => <PostCard key={post.id} post={post} compact onEdit={() => router.push({ pathname: '/write', params: { id: String(post.id) } })} />)}
     </View>
   </Screen>;

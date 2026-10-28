@@ -13,7 +13,9 @@ The interface is in Russian. The initial visual direction is warm paper, dark fo
 - Explicit lookup by page number and random discovery of nonempty pages.
 - A private notebook with personal notes.
 - Rust API backed by a persistent local SQLite database.
-- Demo mode with fictional authors and sample texts to explore the design without starting the API.
+- Offline demo mode with fictional authors and sample texts to explore the design without starting the API.
+- Automatic API database seeding with ten fictional authors and forty varied-length posts.
+- Support for publications up to 30,000 Unicode characters.
 
 ## Requirements
 
@@ -44,7 +46,20 @@ cp .env.example .env
 cargo run
 ```
 
-The default API listens at `http://127.0.0.1:3001`. The database is created at `server/quiet_library.db`, migrations are applied on startup, and fictional demo authors are inserted only when `DEMO_SEED=true` and the database contains no users. Demo author accounts cannot log in.
+The default API listens at `http://127.0.0.1:3001`. The database is created at `server/quiet_library.db`; SQLx migrations and the development seed run automatically during startup.
+
+### Automatic development seed
+
+The Rust seeder is implemented in `server/src/seed.rs` and runs automatically on every API startup. `DEMO_SEED=true` is the default; set `DEMO_SEED=false` in `server/.env` to disable it.
+
+- Ten fictional authors, each with four publications (forty posts total).
+- Posts of varied lengths and subjects, including two generated field journals of approximately 23,000 and 28,000 characters.
+- Preferred example page numbers: `56`, `207`, `314`, `721`, `1128`, `1450`, `1502`, `1699`, `1764`, and `1888`. If a preferred number belongs to a real user, the demo author is assigned another number instead.
+- The seed is idempotent: restarting the server does not duplicate authors or posts. It also upgrades databases containing the original five demo authors and one post per author.
+- Existing user accounts, original demo post contents, and personal notebook entries are preserved.
+- Demo author accounts are read-only fixtures and cannot log in.
+
+Use `curl http://localhost:3001/api/catalog/stats` to inspect the total user and publication counts. If you have existing real users, these totals will exceed the seed counts.
 
 In another terminal, create a client `.env` file using `.env.example` as a starting point and set:
 
@@ -80,7 +95,7 @@ cargo check
 cargo test
 ```
 
-The server tests cover the unique numeric pages, duplicate accounts, ownership of posts, and privacy of notebook notes.
+The server tests cover unique numeric pages, duplicate accounts, post ownership, notebook privacy, idempotent seeding, legacy fixture preservation, and two long seeded posts.
 
 ## Project structure
 
@@ -90,6 +105,7 @@ quiet-library/
   src/components/         Reusable reading and form components
   src/lib/                API client, demo data, session, and theme
   server/src/main.rs      Axum HTTP API
+  server/src/seed.rs      Idempotent development content seeder
   server/migrations/      SQLite schema
   .env.example            Client environment template
   server/.env.example     API environment template

@@ -47,22 +47,22 @@ export default function NotebookScreen() {
     <View style={styles.head}>
       <Text style={common.eyebrow}>ЛИЧНАЯ КАРТОТЕКА</Text>
       <Text style={styles.heading}>Мой блокнот<Text style={styles.dot}>.</Text></Text>
-      <Text style={styles.subtitle}>Особенные страницы, к которым хочется возвращаться. Только вы видите свои заметки.</Text>
+      <Text style={styles.subtitle}>Сохранённые авторы и ваши личные заметки. Заметки доступны только вам.</Text>
       <View style={styles.privateBadge}><LockKeyhole size={14} color={palette.forest} /><Text style={styles.privateText}>ДОСТУПЕН ТОЛЬКО ВАМ</Text></View>
     </View>
     {sessionLoading ? <ActivityIndicator color={palette.forest} /> : !user ?
-      <EmptyState privatePage title="Здесь будет ваш блокнот" message="Сохраняйте страницы интересных авторов и личные мысли о них. Никто другой не увидит ваши заметки." action="Войти в библиотеку" onAction={() => router.push('/auth')} /> :
+      <EmptyState privatePage title="Личный блокнот" message="Войдите, чтобы сохранять страницы авторов и добавлять приватные заметки." action="Войти в библиотеку" onAction={() => router.push('/auth')} /> :
       <View>
         <SectionLabel text="Сохранённые страницы" trailing={`${entries.length} в картотеке`} />
         <ErrorText message={error} />
         {loading ? <ActivityIndicator color={palette.forest} style={{ marginTop: 30 }} /> : entries.length === 0 ?
-          <EmptyState title="Пока ни одной закладки" message="Откройте случайную страницу в каталоге и сохраните автора, чьи тексты вам близки." action="Пойти исследовать" onAction={() => router.push('/')} /> :
+          <EmptyState title="Пока нет закладок" message="Откройте страницу автора и нажмите «Сохранить в блокнот»." action="Открыть каталог" onAction={() => router.push('/')} /> :
           <View style={[styles.list, width > 780 && styles.listWide]}>
             {entries.map((entry, index) => <View key={entry.pageNumber} style={[styles.entry, width > 780 && { width: '48.8%' }]}>
               <View style={styles.entryMeta}><Text style={styles.entryNumber}>{pageNumber(entry.pageNumber)}</Text><Text style={styles.entryIndex}>КАРТОЧКА {String(index + 1).padStart(2, '0')}</Text></View>
               <Text style={styles.entryName}>{entry.displayName}</Text>
               <Text style={styles.entryBio} numberOfLines={2}>{entry.bio}</Text>
-              <View style={styles.noteBox}><Text style={styles.noteLabel}>МОЯ ЗАМЕТКА</Text><Text style={styles.noteText}>{entry.note || 'Пока без заметки. Добавьте пару слов, чтобы не забыть, почему сохранили страницу.'}</Text></View>
+              <View style={styles.noteBox}><Text style={styles.noteLabel}>МОЯ ЗАМЕТКА</Text><Text style={styles.noteText}>{entry.note || 'Заметка не добавлена.'}</Text></View>
               <View style={styles.entryActions}>
                 <Pressable onPress={() => router.push({ pathname: '/page/[number]', params: { number: String(entry.pageNumber) } })} style={styles.entryAction}><ArrowRight size={16} color={palette.forest} /><Text style={styles.entryActionLabel}>Читать</Text></Pressable>
                 <Pressable onPress={() => edit(entry)} style={styles.entryAction}><Pencil size={14} color={palette.forest} /><Text style={styles.entryActionLabel}>Заметка</Text></Pressable>
@@ -75,8 +75,8 @@ export default function NotebookScreen() {
       <View style={styles.modalOverlay}>
         <View style={styles.modalCard}>
           <View style={styles.modalTop}><View><Text style={common.eyebrow}>ЛИЧНАЯ ЗАМЕТКА</Text><Text style={styles.modalTitle}>{editing && pageNumber(editing.pageNumber)}</Text></View><Pressable onPress={() => setEditing(null)}><X size={23} color={palette.ink} /></Pressable></View>
-          <Text style={styles.modalDescription}>Эту запись видите только вы. Что важного вы нашли на этой странице?</Text>
-          <BookInput multiline value={note} onChangeText={setNote} placeholder="Например: пишет о старых городах и хороших книгах..." style={{ minHeight: 135 }} />
+          <Text style={styles.modalDescription}>Эта заметка доступна только вам.</Text>
+          <BookInput multiline value={note} onChangeText={setNote} placeholder="Добавьте заметку об авторе..." style={{ minHeight: 135 }} />
           <ErrorText message={error} />
           <View style={styles.modalActions}><ActionButton title="Отмена" variant="quiet" onPress={() => setEditing(null)} /><ActionButton title="Сохранить заметку" loading={saving} onPress={save} /></View>
         </View>
