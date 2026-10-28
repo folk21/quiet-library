@@ -1,6 +1,6 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
-import { BookOpen, LockKeyhole, ArrowUpRight, type LucideIcon } from 'lucide-react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
+import { BookOpen, LockKeyhole, Feather, type LucideIcon } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { common, font, palette, shadow } from '../lib/theme';
@@ -13,7 +13,7 @@ export function Screen({ children, style }: { children: React.ReactNode; style?:
         <BrandHeader />
         {children}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>ТИХАЯ БИБЛИОТЕКА  ·  СЛОВА ИМЕЮТ ЗНАЧЕНИЕ</Text>
+          <Text style={styles.footerText}>ТИХАЯ БИБЛИОТЕКА  ·  ЧТЕНИЕ И ПУБЛИКАЦИИ</Text>
           {isDemoMode && <Text style={styles.demoPill}>ДЕМО-РЕЖИМ</Text>}
         </View>
       </View>
@@ -27,10 +27,10 @@ export function BrandHeader() {
       <View style={styles.brandIcon}><BookOpen size={19} strokeWidth={1.65} color={palette.card} /></View>
       <View><Text style={styles.brandName}>ТИХАЯ</Text><Text style={styles.brandName}>БИБЛИОТЕКА</Text></View>
     </Pressable>
-    <View style={styles.brandRight}>
-      <Text style={styles.brandMotto}>место для неспешного чтения</Text>
-      <ArrowUpRight size={18} color={palette.moss} strokeWidth={1.5} />
-    </View>
+    <Pressable onPress={() => router.push('/write')} style={styles.brandRight} accessibilityRole="button" accessibilityLabel="Новая публикация">
+      <Feather size={17} color={palette.forest} strokeWidth={1.7} />
+      <Text style={styles.brandAction}>Написать</Text>
+    </Pressable>
   </View>;
 }
 
@@ -55,14 +55,18 @@ export function SectionLabel({ text, trailing }: { text: string; trailing?: stri
   </View>;
 }
 
-export function BookInput({ value, onChangeText, placeholder, multiline, secureTextEntry, keyboardType, autoCapitalize, style }: {
+export function BookInput({ value, onChangeText, placeholder, multiline, secureTextEntry, keyboardType, autoCapitalize, onSubmitEditing, returnKeyType, submitBehavior, style }: {
   value: string; onChangeText: (value: string) => void; placeholder: string; multiline?: boolean;
   secureTextEntry?: boolean; keyboardType?: 'default' | 'numeric' | 'email-address';
   autoCapitalize?: 'none' | 'sentences' | 'words'; style?: StyleProp<ViewStyle>;
+  onSubmitEditing?: TextInputProps['onSubmitEditing'];
+  returnKeyType?: TextInputProps['returnKeyType'];
+  submitBehavior?: TextInputProps['submitBehavior'];
 }) {
   return <TextInput value={value} onChangeText={onChangeText} placeholder={placeholder}
     placeholderTextColor="#9AA79C" selectionColor={palette.forest} multiline={multiline}
     secureTextEntry={secureTextEntry} keyboardType={keyboardType} autoCapitalize={autoCapitalize}
+    onSubmitEditing={onSubmitEditing} returnKeyType={returnKeyType} submitBehavior={submitBehavior}
     style={[common.input, multiline && { minHeight: 120, textAlignVertical: 'top' }, style]} />;
 }
 
@@ -83,12 +87,12 @@ export function ErrorText({ message }: { message: string | null }) {
 
 const styles = StyleSheet.create({
   scroll: { flexGrow: 1, paddingBottom: 16 },
-  brandBar: { height: 98, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderColor: palette.border, marginBottom: 35 },
+  brandBar: { height: 70, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderColor: palette.border, marginBottom: 22 },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   brandIcon: { width: 43, height: 43, backgroundColor: palette.forest, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   brandName: { fontFamily: font.sans, fontWeight: '800', letterSpacing: 2.8, color: palette.ink, fontSize: 10.5, lineHeight: 14 },
-  brandRight: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  brandMotto: { fontFamily: font.serif, fontStyle: 'italic', fontSize: 12, color: palette.muted },
+  brandRight: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: palette.sage, paddingHorizontal: 12, paddingVertical: 11, borderRadius: 10 },
+  brandAction: { fontFamily: font.sans, fontSize: 12, fontWeight: '700', color: palette.forest },
   action: { minHeight: 51, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 11 },
   actionPrimary: { backgroundColor: palette.forest },
   actionSecondary: { backgroundColor: palette.sage, borderWidth: 1, borderColor: '#D4E1D5' },
@@ -96,7 +100,7 @@ const styles = StyleSheet.create({
   actionText: { fontFamily: font.sans, fontSize: 13.5, letterSpacing: 0.2, fontWeight: '700' },
   labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 14 },
   labelTrailing: { color: palette.muted, fontSize: 12, fontFamily: font.sans },
-  footer: { marginTop: 76, paddingTop: 28, borderTopColor: palette.border, borderTopWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 },
+  footer: { marginTop: 38, paddingTop: 21, borderTopColor: palette.border, borderTopWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 },
   footerText: { fontSize: 9, letterSpacing: 1.8, color: palette.muted, fontWeight: '600' },
   demoPill: { fontSize: 9, color: palette.accent, letterSpacing: 1.5, fontWeight: '800' },
   empty: { backgroundColor: palette.card, borderWidth: 1, borderColor: palette.border, borderRadius: 18, alignItems: 'center', paddingVertical: 55, paddingHorizontal: 26, ...shadow },

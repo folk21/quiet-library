@@ -1,134 +1,290 @@
-import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { router } from 'expo-router';
-import { ArrowRight, BookMarked, Compass, Hash, Search } from 'lucide-react-native';
+import React, { useCallback, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { ArrowRight, BookOpen, Bookmark, ChevronRight, Clock3, Feather, Hash, Mail, Search, Shuffle, Trash2 } from 'lucide-react-native';
 import { ActionButton, BookInput, ErrorText, Screen, SectionLabel } from '../../components/Ui';
 import { api } from '../../lib/api';
-import type { CatalogStats } from '../../lib/types';
-import { common, font, palette, pageNumber, shadow } from '../../lib/theme';
+import { clearRecentPages, loadRecentPages, type RecentPage } from '../../lib/recentPages';
+import { useSession } from '../../lib/session';
+import type { CatalogAuthor, CatalogStats, SearchHit } from '../../lib/types';
+import { common, font, palette, pageNumber } from '../../lib/theme';
+
+type SearchMode = 'content' | 'number';
+
+function openedAt(value: string): string {
+  return new Date(value).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
 
 export default function DiscoverScreen() {
-  const [query, setQuery] = useState('');
+  const [mode, setMode] = useState<SearchMode>('content');
+  const [numberQuery, setNumberQuery] = useState('');
+  const [textQuery, setTextQuery] = useState('');
+  const [results, setResults] = useState<SearchHit[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [authors, setAuthors] = useState<CatalogAuthor[]>([]);
+  const [authorsError, setAuthorsError] = useState<string | null>(null);
+  const [showAllAuthors, setShowAllAuthors] = useState(false);
+  const [recent, setRecent] = useState<RecentPage[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [confirmClear, setConfirmClear] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [stats, setStats] = useState<CatalogStats | null>(null);
+  const { user } = useSession();
   const { width } = useWindowDimensions();
-  const wide = width > 760;
+  const wide = width > 680;
 
-  useEffect(() => { api.stats().then(setStats).catch(() => {}); }, []);
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    void loadRecentPages()
+      .then((items) => { if (active) setRecent(items); })
+      .finally(() => { if (active) setLoadingHistory(false); });
+    api.stats().then((value) => { if (active) setStats(value); }).catch(() => {});
+    api.catalogAuthors()
+      .then((value) => { if (active) { setAuthors(value); setAuthorsError(null); } })
+      .catch(() => { if (active) setAuthorsError('Не удалось загрузить авторов.'); });
+    return () => { active = false; };
+  }, []));
 
-  async function goToNumber() {
-    const number = Number(query.trim().replace(/[^0-9]/g, ''));
-    if (!Number.isSafeInteger(number) || number <= 0) { setMessage('Введите существующий номер страницы.'); return; }
-    setMessage(null);
-    router.push({ pathname: '/page/[number]', params: { number: String(number) } });
+  function openPage(number: number, postId?: number) {
+    router.push({ pathname: '/page/[number]', params: {
+      number: String(number),
+      ...(postId ? { post: String(postId) } : {}),
+    } });
+  }
+
+  function goToNumber() {
+    const value = numberQuery.trim();
+    const number = Number(value);
+    if (!/^\d+$/.test(value) || !Number.isSafeInteger(number) || number <= 0) {
+      setSearchError('Введите корректный номер страницы.');
+      return;
+    }
+    setSearchError(null);
+    openPage(number);
+  }
+
+  async function searchText() {
+    const query = textQuery.trim();
+    if (!query) { setSearchError('Введите слово или тему для поиска.'); return; }
+    if (searching) return;
+    setSearching(true);
+    setSearchError(null);
+    try { setResults(await api.search(query)); }
+    catch (error) {
+      setResults(null);
+      setSearchError(error instanceof Error ? error.message : 'Не удалось выполнить поиск.');
+    } finally { setSearching(false); }
   }
 
   async function openRandom() {
+    if (busy) return;
     setBusy(true);
-    setMessage(null);
+    setSearchError(null);
     try {
       const page = await api.randomPage();
-      router.push({ pathname: '/page/[number]', params: { number: String(page.user.pageNumber) } });
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Не удалось открыть страницу.'); }
-    finally { setBusy(false); }
+      openPage(page.user.pageNumber);
+    } catch (error) {
+      setSearchError(error instanceof Error ? error.message : 'Не удалось открыть страницу.');
+    } finally { setBusy(false); }
+  }
+
+  async function clearHistory() {
+    await clearRecentPages();
+    setRecent([]);
+    setConfirmClear(false);
   }
 
   return <Screen>
-    <View style={[styles.hero, wide && styles.heroWide]}>
-      <View style={styles.heroCopy}>
-        <View style={styles.heroEyebrow}><View style={styles.eyebrowDot} /><Text style={common.eyebrow}>БИБЛИОТЕКА АВТОРОВ</Text></View>
-        <Text style={[styles.heroTitle, wide && { fontSize: 56, lineHeight: 65 }]}>Люди и их{ '\n' }<Text style={styles.italic}>тексты.</Text></Text>
-        <Text style={styles.heroDescription}>Публикуйте записи, открывайте страницы по номеру и сохраняйте авторов в личный блокнот. Здесь нет ленты, лайков и подписчиков.</Text>
-        <View style={styles.pills}>
-          <Text style={styles.pill}>публикации</Text><Text style={styles.pill}>поиск по номеру</Text><Text style={styles.pill}>личный блокнот</Text>
+    <View style={styles.headingRow}>
+      <View style={styles.headingCopy}>
+        <Text style={common.eyebrow}>ГЛАВНАЯ</Text>
+        <Text style={styles.heading}>Тихая библиотека</Text>
+        <Text style={styles.headingHint}>Найдите текст, автора или вернитесь к чтению.</Text>
+      </View>
+      {stats && <View style={styles.statsBadge}>
+        <Text style={styles.statsValue}>{stats.pages} <Text style={styles.statsLabel}>авторов</Text></Text>
+        <Text style={styles.statsCaption}>{stats.posts} публикаций</Text>
+      </View>}
+    </View>
+
+    <View style={styles.searchPanel}>
+      <View style={styles.searchTop}>
+        <Text style={styles.searchLabel}>БЫСТРЫЙ ПОИСК</Text>
+        <View style={styles.searchModes}>
+          <Pressable accessibilityRole="button" onPress={() => { setMode('content'); setSearchError(null); }}
+            style={[styles.modeButton, mode === 'content' && styles.modeSelected]}>
+            <Search size={15} color={mode === 'content' ? palette.white : palette.forest} />
+            <Text style={[styles.modeText, mode === 'content' && styles.modeTextSelected]}>По текстам</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" onPress={() => { setMode('number'); setSearchError(null); }}
+            style={[styles.modeButton, mode === 'number' && styles.modeSelected]}>
+            <Hash size={15} color={mode === 'number' ? palette.white : palette.forest} />
+            <Text style={[styles.modeText, mode === 'number' && styles.modeTextSelected]}>По номеру</Text>
+          </Pressable>
         </View>
       </View>
-      <Pressable onPress={() => router.push('/page/56')} style={styles.bookPreview} accessibilityRole="button" accessibilityLabel="Открыть страницу 56">
-        <View style={styles.previewMark}><Text style={styles.previewMarkText}>ПРИМЕР СТРАНИЦЫ</Text><BookMarked color={palette.accent} size={18} strokeWidth={1.3} /></View>
-        <View style={styles.previewCircle}><BookMarked color={palette.forest} size={27} strokeWidth={1.2} /></View>
-        <Text style={styles.previewNumber}>{pageNumber(56)}</Text>
-        <Text style={styles.previewName}>Ева Белая</Text>
-        <Text style={styles.previewDescription}>Городские прогулки, архивные находки и заметки о повседневности.</Text>
-        <View style={styles.previewBottom}><Text style={styles.previewBottomText}>ПОСМОТРЕТЬ СТРАНИЦУ</Text><ArrowRight size={18} color={palette.forest} /></View>
-      </Pressable>
+      <View style={styles.searchRow}>
+        <View style={styles.searchField}>
+          {mode === 'content' ? <Search size={19} color={palette.moss} /> : <Hash size={19} color={palette.moss} />}
+          {mode === 'content' ?
+            <BookInput value={textQuery} onChangeText={(value) => { setTextQuery(value); setResults(null); setSearchError(null); }}
+              placeholder="Слово, тема или фраза" onSubmitEditing={() => void searchText()}
+              returnKeyType="search" submitBehavior="blurAndSubmit" style={styles.searchInput} /> :
+            <BookInput value={numberQuery} onChangeText={(value) => { setNumberQuery(value); setSearchError(null); }}
+              placeholder="Номер страницы" keyboardType="numeric" onSubmitEditing={goToNumber}
+              returnKeyType="go" submitBehavior="blurAndSubmit" style={styles.searchInput} />}
+        </View>
+        <ActionButton title={mode === 'content' ? 'Найти' : 'Открыть'} icon={ArrowRight}
+          loading={searching && mode === 'content'} onPress={mode === 'content' ? () => void searchText() : goToNumber}
+          style={styles.searchAction} />
+      </View>
+      <ErrorText message={searchError} />
+      {mode === 'content' && results !== null && <View style={styles.results}>
+        <Text style={styles.resultCount}>{results.length ? `Найдено публикаций: ${results.length}${results.length === 25 ? ' (первые 25)' : ''}` : 'Ничего не найдено. Попробуйте другой запрос.'}</Text>
+        {results.map((hit) => <Pressable key={hit.postId}
+          onPress={() => openPage(hit.pageNumber, hit.postId)}
+          accessibilityRole="button" accessibilityLabel={`Открыть «${hit.title}», автор ${hit.displayName}`}
+          style={({ pressed }) => [styles.resultItem, pressed && styles.pressed]}>
+          <View style={styles.resultContent}>
+            <Text style={styles.resultTitle}>{hit.title}</Text>
+            <Text style={styles.resultBy}>{hit.displayName} · {pageNumber(hit.pageNumber)}</Text>
+            <Text style={styles.resultExcerpt} numberOfLines={2}>{hit.excerpt}</Text>
+          </View>
+          <ChevronRight size={20} color={palette.forest} />
+        </Pressable>)}
+      </View>}
     </View>
 
-    <View style={styles.findSection}>
-      <SectionLabel text="01 / Найти страницу" trailing="По номеру из каталога" />
-      <Text style={styles.findTitle}>Поиск по номеру</Text>
-      <View style={[styles.searchRow, !wide && { flexDirection: 'column' }]}>
-        <View style={styles.searchWrap}><Search size={20} color={palette.moss} strokeWidth={1.7} /><BookInput value={query} onChangeText={setQuery} placeholder="Например, 0056" keyboardType="numeric" style={styles.searchInput} /></View>
-        <ActionButton title="Найти страницу" icon={ArrowRight} onPress={goToNumber} style={wide ? { minWidth: 190 } : { width: '100%' }} />
+    <View style={styles.historySection}>
+      <View style={styles.sectionHead}>
+        <View style={styles.sectionTitleRow}><Clock3 size={19} color={palette.forest} /><Text style={styles.sectionTitle}>Недавно открытые</Text></View>
+        {recent.length > 0 && !confirmClear &&
+          <Pressable accessibilityRole="button" onPress={() => setConfirmClear(true)} style={styles.clearButton}>
+            <Trash2 size={14} color={palette.muted} /><Text style={styles.clearText}>Очистить</Text>
+          </Pressable>}
       </View>
-      <ErrorText message={message} />
+      {confirmClear && <View style={styles.clearPrompt}>
+        <Text style={styles.clearPromptText}>Удалить историю на этом устройстве?</Text>
+        <Pressable accessibilityRole="button" onPress={() => void clearHistory()}><Text style={styles.confirmText}>Удалить</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => setConfirmClear(false)}><Text style={styles.cancelText}>Отмена</Text></Pressable>
+      </View>}
+      {loadingHistory ? <ActivityIndicator color={palette.forest} style={{ marginVertical: 24 }} /> :
+        recent.length === 0 ? <View style={styles.historyEmpty}>
+          <BookOpen size={20} color={palette.moss} />
+          <Text style={styles.historyEmptyText}>Открытые страницы появятся здесь. История хранится на этом устройстве.</Text>
+        </View> :
+        <View style={styles.historyList}>
+          {recent.map((entry) => <Pressable key={entry.pageNumber}
+            accessibilityRole="button" accessibilityLabel={`Открыть страницу ${entry.displayName}`}
+            onPress={() => openPage(entry.pageNumber)}
+            style={({ pressed }) => [styles.historyItem, pressed && styles.pressed]}>
+            <View style={styles.historyNumber}><Text style={styles.historyNumberText}>{String(entry.pageNumber).padStart(4, '0')}</Text></View>
+            <View style={styles.historyCopy}>
+              <Text style={styles.historyName} numberOfLines={1}>{entry.displayName}</Text>
+              <Text style={styles.historyMeta} numberOfLines={1}>{entry.postCount} публикаций · {openedAt(entry.openedAt)}</Text>
+            </View>
+            <ChevronRight size={20} color={palette.moss} />
+          </Pressable>)}
+        </View>}
     </View>
 
-    <View style={[styles.randomCard, wide && { flexDirection: 'row', alignItems: 'center' }]}>
-      <View style={styles.randomIcon}><Compass size={27} color={palette.forest} strokeWidth={1.35} /></View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.randomEyebrow}>СЛУЧАЙНЫЙ АВТОР</Text>
-        <Text style={styles.randomTitle}>Открыть случайную страницу</Text>
-        <Text style={styles.randomText}>Если номера нет, можно выбрать страницу случайным образом и прочитать публикации её автора.</Text>
+    <View style={styles.toolsSection}>
+      <SectionLabel text="Быстрые действия" />
+      <View style={[styles.tools, !wide && styles.toolsMobile]}>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/write')} style={({ pressed }) => [styles.tool, pressed && styles.pressed]}>
+          <Feather size={20} color={palette.forest} /><Text style={styles.toolText}>Новый текст</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" disabled={busy} onPress={() => void openRandom()} style={({ pressed }) => [styles.tool, pressed && styles.pressed]}>
+          {busy ? <ActivityIndicator size="small" color={palette.forest} /> : <Shuffle size={20} color={palette.forest} />}
+          <Text style={styles.toolText}>Случайная</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/(tabs)/messages')} style={({ pressed }) => [styles.tool, pressed && styles.pressed]}>
+          <Mail size={20} color={palette.forest} /><Text style={styles.toolText}>Сообщения</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={() => router.push(user ? '/(tabs)/me' : '/(tabs)/notebook')} style={({ pressed }) => [styles.tool, pressed && styles.pressed]}>
+          <Bookmark size={20} color={palette.forest} /><Text style={styles.toolText}>{user ? 'Моя страница' : 'Блокнот'}</Text>
+        </Pressable>
       </View>
-      <ActionButton title="Открыть" icon={ArrowRight} variant="secondary" loading={busy} onPress={openRandom} style={wide ? { minWidth: 167 } : { marginTop: 18 }} />
     </View>
 
-    <View style={styles.principles}>
-      <SectionLabel text="02 / Как устроена библиотека" trailing="Простые правила" />
-      <View style={[styles.principlesRow, !wide && { flexDirection: 'column' }]}>
-        <View style={styles.principle}><View style={styles.principleIcon}><Hash size={21} color={palette.accent} /></View><Text style={styles.principleTitle}>Постоянный номер</Text><Text style={styles.principleBody}>Каждый пользователь получает числовой адрес страницы, который не меняется.</Text></View>
-        <View style={styles.principle}><View style={styles.principleIcon}><BookMarked size={21} color={palette.accent} /></View><Text style={styles.principleTitle}>Личный блокнот</Text><Text style={styles.principleBody}>Сохраняйте авторов и добавляйте приватные заметки к их страницам.</Text></View>
-        <View style={styles.principle}><View style={styles.principleIcon}><Compass size={21} color={palette.accent} /></View><Text style={styles.principleTitle}>Без ленты</Text><Text style={styles.principleBody}>Авторы находятся по номеру или случайным выбором. Рекомендаций нет.</Text></View>
+    <View style={styles.authorsSection}>
+      <SectionLabel text="Авторы" trailing={`${authors.length} в подборке`} />
+      <Text style={styles.authorsHint}>Выберите имя, чтобы открыть страницу автора.</Text>
+      <ErrorText message={authorsError} />
+      <View style={styles.authorCloud}>
+        {(showAllAuthors ? authors : authors.slice(0, 12)).map((author) => <Pressable
+          key={author.pageNumber} onPress={() => openPage(author.pageNumber)}
+          accessibilityRole="button" accessibilityLabel={`Автор ${author.displayName}, страница ${author.pageNumber}`}
+          style={({ pressed }) => [styles.authorItem, pressed && styles.pressed]}>
+          <Text style={styles.authorName}>{author.displayName}</Text>
+          <Text style={styles.authorNumber}>{pageNumber(author.pageNumber)}</Text>
+        </Pressable>)}
       </View>
-    </View>
-    <View style={styles.ending}>
-      <Text style={styles.endingEyebrow}>КАТАЛОГ</Text>
-      <Text style={styles.endingTitle}>{stats ? `${stats.pages} авторов · ${stats.posts} публикаций` : 'Читайте и публикуйте тексты'}</Text>
-      <Text style={styles.endingDescription}>Просмотр доступен всем. Для публикации текстов и личного блокнота нужна регистрация.</Text>
-      <ActionButton title="Создать свою страницу" variant="secondary" onPress={() => router.push('/auth?mode=register')} icon={ArrowRight} style={{ alignSelf: 'flex-start', marginTop: 22 }} />
+      {authors.length > 12 && <ActionButton variant="quiet" title={showAllAuthors ? 'Свернуть список' : `Показать всех (${authors.length})`}
+        icon={ArrowRight} onPress={() => setShowAllAuthors((value) => !value)} style={styles.authorsToggle} />}
     </View>
   </Screen>;
 }
 
 const styles = StyleSheet.create({
-  hero: { gap: 24, paddingTop: 13, paddingBottom: 55 },
-  heroWide: { flexDirection: 'row', alignItems: 'center', gap: 45, paddingTop: 25, paddingBottom: 66 },
-  heroCopy: { flex: 1, minWidth: 0 },
-  heroEyebrow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 22 },
-  eyebrowDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: palette.accent },
-  heroTitle: { fontFamily: font.serif, color: palette.ink, fontSize: 39, lineHeight: 49, letterSpacing: -1.4 },
-  italic: { fontStyle: 'italic', color: palette.forest },
-  heroDescription: { fontFamily: font.sans, fontSize: 15.5, color: palette.inkSoft, lineHeight: 27, maxWidth: 430, marginTop: 22 },
-  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 24 },
-  pill: { color: palette.forest, backgroundColor: palette.sage, fontSize: 11.2, fontWeight: '600', paddingHorizontal: 10, paddingVertical: 7, borderRadius: 20 },
-  bookPreview: { backgroundColor: '#E8E9DE', borderColor: '#CBD3C8', borderWidth: 1, borderRadius: 7, width: '100%', maxWidth: 324, minHeight: 395, padding: 27, alignSelf: 'center', justifyContent: 'space-between', borderLeftWidth: 10, borderLeftColor: palette.forest, ...shadow },
-  previewMark: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  previewMarkText: { fontSize: 10, fontWeight: '700', letterSpacing: 2, color: palette.moss },
-  previewCircle: { alignSelf: 'center', height: 70, width: 70, borderRadius: 35, borderWidth: 1, borderColor: '#B7C2B4', alignItems: 'center', justifyContent: 'center', marginTop: 17 },
-  previewNumber: { fontFamily: font.serif, fontSize: 36, textAlign: 'center', color: palette.forest, marginTop: 6 },
-  previewName: { fontFamily: font.serif, fontSize: 20, color: palette.ink, textAlign: 'center' },
-  previewDescription: { fontFamily: font.sans, fontSize: 14, color: palette.inkSoft, lineHeight: 23, textAlign: 'center', marginTop: 7 },
-  previewBottom: { borderTopWidth: 1, borderTopColor: '#C5CFC1', marginTop: 15, paddingTop: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  previewBottomText: { fontSize: 10, color: palette.forest, letterSpacing: 1.6, fontWeight: '700' },
-  findSection: { borderTopWidth: 1, borderTopColor: palette.border, paddingTop: 31, paddingBottom: 36 },
-  findTitle: { fontFamily: font.serif, fontSize: 27, color: palette.ink, marginBottom: 18 },
-  searchRow: { flexDirection: 'row', gap: 11 },
-  searchWrap: { flex: 1, minWidth: 0, borderWidth: 1, borderColor: palette.border, borderRadius: 12, backgroundColor: palette.card, flexDirection: 'row', alignItems: 'center', gap: 5, paddingLeft: 14 },
-  searchInput: { flex: 1, borderWidth: 0, backgroundColor: 'transparent', paddingLeft: 5 },
-  randomCard: { backgroundColor: '#E8ECE1', borderWidth: 1, borderColor: '#D5DCCE', borderRadius: 18, padding: 25, gap: 19 },
-  randomIcon: { width: 55, height: 55, borderRadius: 14, backgroundColor: palette.card, alignItems: 'center', justifyContent: 'center' },
-  randomEyebrow: { fontSize: 10, letterSpacing: 2.1, color: palette.forest, fontWeight: '800', marginBottom: 7 },
-  randomTitle: { fontFamily: font.serif, fontSize: 24, color: palette.ink },
-  randomText: { color: palette.inkSoft, fontSize: 13, lineHeight: 22, marginTop: 7, maxWidth: 430 },
-  principles: { marginTop: 63 },
-  principlesRow: { flexDirection: 'row', gap: 14 },
-  principle: { flex: 1, borderTopWidth: 1, borderTopColor: palette.border, paddingTop: 22, minWidth: 0 },
-  principleIcon: { marginBottom: 17 },
-  principleTitle: { fontFamily: font.serif, fontSize: 20, color: palette.ink, marginBottom: 8 },
-  principleBody: { fontSize: 13.2, lineHeight: 22, color: palette.inkSoft },
-  ending: { marginTop: 64, padding: 28, borderWidth: 1, borderColor: palette.border, borderRadius: 18, backgroundColor: palette.card },
-  endingEyebrow: { color: palette.accent, fontSize: 10, letterSpacing: 2.1, fontWeight: '800' },
-  endingTitle: { fontFamily: font.serif, fontSize: 28, color: palette.ink, marginTop: 13 },
-  endingDescription: { fontSize: 14, color: palette.inkSoft, lineHeight: 23, marginTop: 10 },
+  headingRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14, marginBottom: 25 },
+  headingCopy: { flex: 1, minWidth: 210 },
+  heading: { fontFamily: font.serif, color: palette.ink, fontSize: 34, lineHeight: 42, marginTop: 7 },
+  headingHint: { color: palette.inkSoft, fontSize: 13, marginTop: 6, lineHeight: 20 },
+  statsBadge: { backgroundColor: palette.sage, paddingHorizontal: 15, paddingVertical: 11, borderRadius: 12, alignSelf: 'center' },
+  statsValue: { fontFamily: font.serif, color: palette.forest, fontSize: 18 },
+  statsLabel: { fontFamily: font.sans, fontSize: 12 },
+  statsCaption: { color: palette.moss, fontSize: 11, marginTop: 3 },
+  searchPanel: { backgroundColor: palette.card, borderWidth: 1, borderColor: palette.border, borderRadius: 15, padding: 18 },
+  searchTop: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 9, marginBottom: 13 },
+  searchLabel: { color: palette.moss, fontSize: 10, fontWeight: '800', letterSpacing: 1.5 },
+  searchModes: { flexDirection: 'row', borderRadius: 9, backgroundColor: palette.paperAlt, padding: 3, gap: 3 },
+  modeButton: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 7 },
+  modeSelected: { backgroundColor: palette.forest },
+  modeText: { color: palette.forest, fontSize: 12, fontWeight: '700' },
+  modeTextSelected: { color: palette.white },
+  searchRow: { flexDirection: 'row', gap: 9, alignItems: 'stretch' },
+  searchField: { flex: 1, minWidth: 0, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.paper, borderRadius: 10, flexDirection: 'row', alignItems: 'center', paddingLeft: 12 },
+  searchInput: { flex: 1, minWidth: 0, borderWidth: 0, backgroundColor: 'transparent', fontSize: 14, paddingHorizontal: 10 },
+  searchAction: { minWidth: 105, paddingHorizontal: 12 },
+  results: { marginTop: 17, borderTopWidth: 1, borderTopColor: palette.border, paddingTop: 13, gap: 8 },
+  resultCount: { fontSize: 12, fontWeight: '700', color: palette.moss, marginBottom: 4 },
+  resultItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: palette.paper, borderRadius: 10, padding: 14, gap: 11 },
+  resultContent: { flex: 1, minWidth: 0 },
+  resultTitle: { fontFamily: font.serif, color: palette.ink, fontSize: 19 },
+  resultBy: { color: palette.forest, fontSize: 11, fontWeight: '700', marginTop: 4 },
+  resultExcerpt: { color: palette.inkSoft, fontSize: 12, lineHeight: 19, marginTop: 7 },
+  historySection: { marginTop: 28 },
+  sectionHead: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 13 },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  sectionTitle: { fontFamily: font.serif, fontSize: 24, color: palette.ink },
+  clearButton: { flexDirection: 'row', gap: 6, alignItems: 'center', paddingHorizontal: 8, paddingVertical: 7 },
+  clearText: { fontSize: 11, color: palette.muted, fontWeight: '700' },
+  clearPrompt: { flexDirection: 'row', flexWrap: 'wrap', gap: 15, alignItems: 'center', backgroundColor: palette.accentLight, padding: 12, borderRadius: 9, marginBottom: 10 },
+  clearPromptText: { color: palette.inkSoft, fontSize: 12, flex: 1, minWidth: 130 },
+  confirmText: { color: palette.danger, fontSize: 12, fontWeight: '800' },
+  cancelText: { color: palette.forest, fontSize: 12, fontWeight: '700' },
+  historyList: { backgroundColor: palette.card, borderWidth: 1, borderColor: palette.border, borderRadius: 13, overflow: 'hidden' },
+  historyItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 13, gap: 13, borderBottomColor: palette.border, borderBottomWidth: StyleSheet.hairlineWidth },
+  historyNumber: { minWidth: 70, paddingHorizontal: 7, height: 40, justifyContent: 'center', alignItems: 'center', backgroundColor: palette.sage, borderRadius: 8 },
+  historyNumberText: { fontFamily: font.serif, fontSize: 16, color: palette.forest },
+  historyCopy: { flex: 1, minWidth: 0 },
+  historyName: { fontFamily: font.serif, fontSize: 19, color: palette.ink },
+  historyMeta: { color: palette.muted, fontSize: 11.5, marginTop: 5 },
+  historyEmpty: { backgroundColor: palette.card, borderWidth: 1, borderColor: palette.border, borderRadius: 12, paddingHorizontal: 17, paddingVertical: 21, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  historyEmptyText: { flex: 1, fontSize: 13, color: palette.muted, lineHeight: 20 },
+  toolsSection: { marginTop: 33 },
+  tools: { flexDirection: 'row', gap: 10 },
+  toolsMobile: { flexWrap: 'wrap' },
+  tool: { flex: 1, minWidth: 115, backgroundColor: palette.card, borderWidth: 1, borderColor: palette.border, borderRadius: 11, paddingHorizontal: 12, paddingVertical: 17, alignItems: 'center', gap: 10 },
+  toolText: { color: palette.forest, fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  authorsSection: { marginTop: 39, paddingTop: 26, borderTopWidth: 1, borderTopColor: palette.border },
+  authorsHint: { color: palette.inkSoft, fontSize: 12.5, marginBottom: 14 },
+  authorCloud: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  authorItem: { backgroundColor: palette.card, borderWidth: 1, borderColor: palette.border, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 10 },
+  authorName: { color: palette.ink, fontFamily: font.serif, fontSize: 16 },
+  authorNumber: { color: palette.muted, fontSize: 10, marginTop: 4 },
+  authorsToggle: { alignSelf: 'flex-start', paddingHorizontal: 0, marginTop: 8 },
+  pressed: { opacity: 0.68, backgroundColor: palette.sage },
 });

@@ -86,11 +86,11 @@ export default function NotebookScreen() {
 }
 
 const styles = StyleSheet.create({
-  head: { borderBottomColor: palette.border, borderBottomWidth: 1, paddingTop: 10, paddingBottom: 36, marginBottom: 28 },
-  heading: { fontFamily: font.serif, fontSize: 45, lineHeight: 57, color: palette.ink, marginTop: 12 },
+  head: { borderBottomColor: palette.border, borderBottomWidth: 1, paddingTop: 6, paddingBottom: 20, marginBottom: 20 },
+  heading: { fontFamily: font.serif, fontSize: 34, lineHeight: 44, color: palette.ink, marginTop: 9 },
   dot: { color: palette.accent },
-  subtitle: { fontSize: 14.5, lineHeight: 25, color: palette.inkSoft, marginTop: 11, maxWidth: 540 },
-  privateBadge: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', backgroundColor: palette.sage, borderRadius: 30, paddingHorizontal: 12, paddingVertical: 8, marginTop: 21 },
+  subtitle: { fontSize: 13.5, lineHeight: 22, color: palette.inkSoft, marginTop: 6, maxWidth: 540 },
+  privateBadge: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', backgroundColor: palette.sage, borderRadius: 30, paddingHorizontal: 12, paddingVertical: 7, marginTop: 12 },
   privateText: { color: palette.forest, fontSize: 10, fontWeight: '800', letterSpacing: 1.4 },
   list: { gap: 14 },
   listWide: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },

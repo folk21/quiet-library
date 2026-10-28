@@ -8,7 +8,7 @@ import { useSession } from '../lib/session';
 import { common, font, palette } from '../lib/theme';
 
 export default function AuthScreen() {
-  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const { mode, to } = useLocalSearchParams<{ mode?: string; to?: string }>();
   const [isRegister, setIsRegister] = useState(mode === 'register');
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -18,11 +18,16 @@ export default function AuthScreen() {
   const { signIn } = useSession();
 
   async function submit() {
+    if (busy) return;
     setBusy(true); setError(null);
     try {
       const response = isRegister ? await api.register({ displayName, email, password }) : await api.login({ email, password });
       await signIn(response);
-      router.replace('/(tabs)/me');
+      if (to && /^\d+$/.test(to) && Number.isSafeInteger(Number(to))) {
+        router.replace({ pathname: '/message/compose', params: { to } });
+      } else {
+        router.replace('/(tabs)/me');
+      }
     } catch (e) { setError(e instanceof Error ? e.message : 'Не удалось войти.'); }
     finally { setBusy(false); }
   }
@@ -37,7 +42,9 @@ export default function AuthScreen() {
       <View style={styles.form}>
         {isRegister && <View style={styles.field}><Text style={styles.label}>ИМЯ АВТОРА</Text><BookInput value={displayName} onChangeText={setDisplayName} placeholder="Как вас называть?" autoCapitalize="words" /></View>}
         <View style={styles.field}><Text style={styles.label}>ЭЛЕКТРОННАЯ ПОЧТА</Text><BookInput value={email} onChangeText={setEmail} placeholder="you@example.com" keyboardType="email-address" autoCapitalize="none" /></View>
-        <View style={styles.field}><Text style={styles.label}>ПАРОЛЬ</Text><BookInput value={password} onChangeText={setPassword} placeholder="Не менее 8 символов" secureTextEntry /></View>
+        <View style={styles.field}><Text style={styles.label}>ПАРОЛЬ</Text><BookInput value={password} onChangeText={setPassword}
+          placeholder="Не менее 8 символов" secureTextEntry
+          onSubmitEditing={() => void submit()} returnKeyType="go" submitBehavior="blurAndSubmit" /></View>
         <ErrorText message={error} />
         <ActionButton title={isRegister ? 'Создать страницу' : 'Войти в библиотеку'} icon={ArrowRight} onPress={submit} loading={busy} style={{ marginTop: 12 }} />
         <Text style={styles.switchText}>{isRegister ? 'Уже есть страница?' : 'Ещё нет страницы?'}{' '}

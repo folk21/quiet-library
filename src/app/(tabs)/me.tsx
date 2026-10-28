@@ -53,14 +53,14 @@ export default function MyPageScreen() {
 }
 
 const styles = StyleSheet.create({
-  personalHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 9, marginBottom: 27, flexWrap: 'wrap' },
-  heroTitle: { fontFamily: font.serif, fontSize: 38, lineHeight: 47, color: palette.ink, marginTop: 12, marginBottom: 16 },
+  personalHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 9, marginBottom: 14, flexWrap: 'wrap' },
+  heroTitle: { fontFamily: font.serif, fontSize: 33, lineHeight: 42, color: palette.ink, marginTop: 9, marginBottom: 9 },
   intro: { fontSize: 15, lineHeight: 25, color: palette.inkSoft, maxWidth: 570, marginBottom: 30 },
-  identity: { backgroundColor: '#E6EAE0', borderRadius: 17, borderWidth: 1, borderColor: '#D4DDD0', padding: 32, alignItems: 'center' },
-  bookIcon: { width: 65, height: 65, backgroundColor: palette.forest, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginBottom: 22 },
+  identity: { backgroundColor: '#E6EAE0', borderRadius: 17, borderWidth: 1, borderColor: '#D4DDD0', padding: 22, alignItems: 'flex-start' },
+  bookIcon: { width: 47, height: 47, backgroundColor: palette.forest, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   number: { fontFamily: font.serif, fontSize: 17, color: palette.forest },
-  name: { fontFamily: font.serif, fontSize: 35, color: palette.ink, marginTop: 9 },
-  bio: { fontSize: 13.5, lineHeight: 23, color: palette.inkSoft, textAlign: 'center', marginTop: 11 },
-  identityActions: { marginTop: 27, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 11 },
-  posts: { marginTop: 43, width: '100%', maxWidth: 700, alignSelf: 'center' },
+  name: { fontFamily: font.serif, fontSize: 30, color: palette.ink, marginTop: 8 },
+  bio: { fontSize: 13.5, lineHeight: 22, color: palette.inkSoft, marginTop: 7 },
+  identityActions: { marginTop: 18, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', gap: 10 },
+  posts: { marginTop: 27, width: '100%', maxWidth: 700, alignSelf: 'center' },
 });

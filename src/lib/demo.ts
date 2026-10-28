@@ -1,4 +1,5 @@
-import type { AuthResponse, Bookmark, CatalogStats, LibraryPage, Post, User } from './types';
+import type { AuthResponse, Bookmark, CatalogAuthor, CatalogStats, LibraryPage, MessageDetails, MessagePreferences, MessageRecipientOptions, MessageSummary, Post, SearchHit, SendMessageInput, User } from './types';
+import { characterCount, messageKind } from './messageKinds';
 
 const now = new Date('2026-10-18T13:00:00.000Z').toISOString();
 
@@ -8,6 +9,11 @@ const sampleUsers: User[] = [
   { id: 3, pageNumber: 314, displayName: 'Ася Гордеева', bio: 'Ботаника в городе, садоводство и наблюдения за растениями.', isDemo: true },
   { id: 4, pageNumber: 721, displayName: 'Никита Северин', bio: 'Городская архитектура, общественные здания и история городских деталей.', isDemo: true },
   { id: 5, pageNumber: 1128, displayName: 'Лия Рейн', bio: 'Жизнь у моря, местная экономика и заметки о береговых городах.', isDemo: true },
+  { id: 6, pageNumber: 1450, displayName: 'Антон Громов', bio: 'Разработка программ и ремонт техники.', isDemo: true },
+  { id: 7, pageNumber: 1502, displayName: 'Дарья Ким', bio: 'Типографика, книги и работа с текстом.', isDemo: true },
+  { id: 8, pageNumber: 1699, displayName: 'Павел Сорокин', bio: 'Пешие маршруты и ориентирование.', isDemo: true },
+  { id: 9, pageNumber: 1764, displayName: 'Марина Орлова', bio: 'Рецепты и городские рынки.', isDemo: true },
+  { id: 10, pageNumber: 1888, displayName: 'Игорь Воронов', bio: 'Радиотехника и восстановление старых приборов.', isDemo: true },
 ];
 
 const samplePosts: Record<number, Post[]> = {
@@ -45,12 +51,39 @@ const samplePosts: Record<number, Post[]> = {
       content: 'В шесть утра на берегу почти никого нет. Рыбаки уже вернулись, а кафе ещё не открылись. Я прошла от маяка до старой лестницы и заметила, что после шторма поменялась линия песка.\n\nМестные говорят, что это обычное осеннее явление, но в этом году берег восстанавливается медленнее. В следующую прогулку возьму фотографии с прошлого сезона и попробую сравнить.',
     },
   ],
+  1450: [
+    { id: 601, title: 'Маленькая программа для архива', content: 'За выходные я написал утилиту для поиска по сканам документов. Самым трудным оказалось решить, что делать с файлами без даты. Я оставил их в отдельной очереди для ручной проверки.', createdAt: now, updatedAt: now },
+  ],
+  1502: [
+    { id: 701, title: 'Неделя в типографии', content: 'Пять дней я проверяла цветопробы и собирала сигнальный экземпляр. Цифровой макет и готовая печатная книга отличаются сильнее, чем кажется на экране.', createdAt: now, updatedAt: now },
+  ],
+  1699: [
+    { id: 801, title: 'Маршрут вдоль канала', content: 'Прошёл восемь километров вдоль старого канала. После дождей тропу размыло, поэтому пришлось свериться с бумажной картой и найти обход через деревню.', createdAt: now, updatedAt: now },
+  ],
+  1764: [
+    { id: 901, title: 'Тетрадь рецептов', content: 'У бабушкиной тетради мягкая обложка и десятки вставленных листков. Рядом с рецептами стоят комментарии после каждой попытки. Переписываю их без исправлений.', createdAt: now, updatedAt: now },
+  ],
+  1888: [
+    { id: 1001, title: 'Три ночи с антенной', content: 'Проверял приём коротковолнового сигнала во дворе. Три вечера сравнивал уровень помех, пока не выяснил, что больше всего мешает блок питания старого светильника.', createdAt: now, updatedAt: now },
+  ],
 };
 
 const demoAccounts = new Map<string, { password: string; user: User }>();
 const demoNotebooks = new Map<number, Map<number, Bookmark>>();
+const demoMessagePreferences = new Map<number, MessagePreferences>();
+const demoMessages: MessageDetails[] = [];
 let nextUserId = 100;
-let nextPostId = 1000;
+let nextPostId = 2000;
+let nextMessageId = 1;
+
+function getPreferences(userId: number): MessagePreferences {
+  return demoMessagePreferences.get(userId) ?? { simple: true, thought: true, letter: true };
+}
+
+function messageSummary(message: MessageDetails): MessageSummary {
+  const { content, ...metadata } = message;
+  return { ...metadata, preview: content.slice(0, 180) };
+}
 
 function wait(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 180));
@@ -76,6 +109,35 @@ export const demo = {
   async stats(): Promise<CatalogStats> {
     await wait();
     return { pages: sampleUsers.length, posts: Object.values(samplePosts).reduce((acc, posts) => acc + posts.length, 0) };
+  },
+  async catalogAuthors(): Promise<CatalogAuthor[]> {
+    await wait();
+    return sampleUsers.slice(0, 40).map((user) => ({
+      pageNumber: user.pageNumber,
+      displayName: user.displayName,
+      postCount: samplePosts[user.pageNumber]?.length ?? 0,
+    }));
+  },
+  async search(query: string): Promise<SearchHit[]> {
+    await wait();
+    const words = query.trim().toLocaleLowerCase('ru').split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    return sampleUsers.flatMap((user) =>
+      (samplePosts[user.pageNumber] ?? []).flatMap((post) => {
+        const text = `${post.title} ${post.content}`.toLocaleLowerCase('ru');
+        if (!words.every((word) => text.includes(word))) return [];
+        const position = post.content.toLocaleLowerCase('ru').indexOf(words[0]);
+        const from = Math.max(0, position - 40);
+        const excerpt = post.content.slice(from, from + 190).replace(/\s+/g, ' ').trim();
+        return [{
+          pageNumber: user.pageNumber,
+          displayName: user.displayName,
+          postId: post.id,
+          title: post.title,
+          excerpt: `${from ? '…' : ''}${excerpt}${from + 190 < post.content.length ? '…' : ''}`,
+        }];
+      })
+    ).slice(0, 25);
   },
   async getPage(number: number): Promise<LibraryPage> {
     await wait();
@@ -145,5 +207,76 @@ export const demo = {
   async deletePost(token: string, id: number): Promise<void> {
     const user = currentUser(token);
     samplePosts[user.pageNumber] = (samplePosts[user.pageNumber] ?? []).filter((item) => item.id !== id);
+  },
+  async messageOptions(number: number): Promise<MessageRecipientOptions> {
+    await wait();
+    const user = sampleUsers.find((item) => item.pageNumber === number);
+    if (!user) throw new Error('Такого автора нет.');
+    return { pageNumber: number, displayName: user.displayName, isDemo: !!user.isDemo, acceptedTypes: { ...getPreferences(user.id) } };
+  },
+  async messagePreferences(token: string): Promise<MessagePreferences> {
+    await wait();
+    return { ...getPreferences(currentUser(token).id) };
+  },
+  async updateMessagePreferences(token: string, preferences: MessagePreferences): Promise<MessagePreferences> {
+    await wait();
+    const user = currentUser(token);
+    const saved = { simple: !!preferences.simple, thought: !!preferences.thought, letter: !!preferences.letter };
+    demoMessagePreferences.set(user.id, saved);
+    return { ...saved };
+  },
+  async inbox(token: string): Promise<MessageSummary[]> {
+    await wait();
+    const user = currentUser(token);
+    return demoMessages.filter((message) => message.recipientPageNumber === user.pageNumber)
+      .sort((a, b) => b.id - a.id).slice(0, 50).map(messageSummary);
+  },
+  async sent(token: string): Promise<MessageSummary[]> {
+    await wait();
+    const user = currentUser(token);
+    return demoMessages.filter((message) => message.senderPageNumber === user.pageNumber)
+      .sort((a, b) => b.id - a.id).slice(0, 50).map(messageSummary);
+  },
+  async getMessage(token: string, id: number): Promise<MessageDetails> {
+    await wait();
+    const user = currentUser(token);
+    const message = demoMessages.find((item) => item.id === id &&
+      (item.senderPageNumber === user.pageNumber || item.recipientPageNumber === user.pageNumber));
+    if (!message) throw new Error('Сообщение не найдено.');
+    return { ...message };
+  },
+  async sendMessage(token: string, input: SendMessageInput): Promise<MessageDetails> {
+    await wait();
+    const sender = currentUser(token);
+    const recipient = sampleUsers.find((item) => item.pageNumber === input.recipientPageNumber);
+    if (!recipient) throw new Error('Автор не найден.');
+    const length = characterCount(input.content);
+    if (length < messageKind(input.kind).minimum || length > 30000 || input.subject.length > 140) {
+      throw new Error('Проверьте длину сообщения и тему.');
+    }
+    if (recipient.id !== sender.id && !getPreferences(recipient.id)[input.kind]) {
+      throw new Error('Автор не принимает сообщения этого типа.');
+    }
+    const message: MessageDetails = {
+      id: nextMessageId++,
+      senderPageNumber: sender.pageNumber,
+      senderName: sender.displayName,
+      recipientPageNumber: recipient.pageNumber,
+      recipientName: recipient.displayName,
+      kind: input.kind,
+      subject: input.subject.trim(),
+      content: input.content.trim(),
+      createdAt: new Date().toISOString(),
+      readAt: null,
+    };
+    demoMessages.push(message);
+    return { ...message };
+  },
+  async markMessageRead(token: string, id: number): Promise<void> {
+    await wait();
+    const user = currentUser(token);
+    const message = demoMessages.find((item) => item.id === id && item.recipientPageNumber === user.pageNumber);
+    if (!message) throw new Error('Сообщение не найдено.');
+    message.readAt ??= new Date().toISOString();
   },
 };

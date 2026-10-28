@@ -3,7 +3,7 @@ use std::{net::SocketAddr, sync::Arc};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString};
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, Method, StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post, put},
@@ -23,6 +23,7 @@ use tower_http::{
 use tracing::{info, warn};
 use uuid::Uuid;
 
+mod messaging;
 mod seed;
 
 #[derive(Clone)]
@@ -155,6 +156,29 @@ struct BookmarkRecord {
 struct CatalogStats {
     pages: i64,
     posts: i64,
+}
+
+#[derive(Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+struct CatalogAuthor {
+    page_number: i64,
+    display_name: String,
+    post_count: i64,
+}
+
+#[derive(Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+struct SearchHit {
+    page_number: i64,
+    display_name: String,
+    post_id: i64,
+    title: String,
+    excerpt: String,
+}
+
+#[derive(Deserialize)]
+struct SearchInput {
+    q: String,
 }
 
 #[derive(Serialize)]
@@ -350,6 +374,61 @@ async fn stats(State(state): State<Arc<AppState>>) -> ApiResult<Json<CatalogStat
     }))
 }
 
+async fn catalog_authors(
+    State(state): State<Arc<AppState>>,
+) -> ApiResult<Json<Vec<CatalogAuthor>>> {
+    let authors = sqlx::query_as::<_, CatalogAuthor>(
+        "SELECT u.id AS page_number, u.display_name, COUNT(p.id) AS post_count
+         FROM users u LEFT JOIN posts p ON p.author_id = u.id
+         GROUP BY u.id ORDER BY RANDOM() LIMIT 40",
+    )
+    .fetch_all(&state.pool)
+    .await?;
+    Ok(Json(authors))
+}
+
+fn full_text_query(input: &str) -> Option<String> {
+    let terms: Vec<String> = input
+        .split(|character: char| !character.is_alphanumeric())
+        .filter(|term| !term.is_empty())
+        .take(8)
+        .map(|term| format!("\"{term}\"*"))
+        .collect();
+    if terms.is_empty() {
+        None
+    } else {
+        Some(terms.join(" AND "))
+    }
+}
+
+async fn search(
+    State(state): State<Arc<AppState>>,
+    Query(input): Query<SearchInput>,
+) -> ApiResult<Json<Vec<SearchHit>>> {
+    if input.q.chars().count() > 120 {
+        return Err(ApiError::bad(
+            "Поисковый запрос не должен превышать 120 символов.",
+        ));
+    }
+    let Some(query) = full_text_query(&input.q) else {
+        return Ok(Json(Vec::new()));
+    };
+    let hits = sqlx::query_as::<_, SearchHit>(
+        "SELECT u.id AS page_number, u.display_name, p.id AS post_id, p.title,
+                snippet(posts_fts, 1, '', '', ' … ', 22) AS excerpt
+         FROM posts_fts
+         JOIN posts p ON p.id = posts_fts.rowid
+         JOIN users u ON u.id = p.author_id
+         WHERE posts_fts MATCH ?
+         ORDER BY bm25(posts_fts), p.created_at DESC
+         LIMIT 25",
+    )
+    .bind(query)
+    .fetch_all(&state.pool)
+    .await?;
+    Ok(Json(hits))
+}
+
 async fn load_page(pool: &SqlitePool, id: i64) -> ApiResult<PageResponse> {
     let user = get_user_by_id(pool, id).await?;
     let posts = sqlx::query_as::<_, PostRecord>(
@@ -524,8 +603,14 @@ fn app(state: Arc<AppState>) -> Router {
         .route("/api/auth/logout", post(logout))
         .route("/api/me", get(me))
         .route("/api/catalog/stats", get(stats))
+        .route("/api/catalog/authors", get(catalog_authors))
+        .route("/api/search", get(search))
         .route("/api/pages/random", get(random_page))
         .route("/api/pages/{number}", get(page))
+        .route(
+            "/api/pages/{number}/message-options",
+            get(messaging::recipient_options),
+        )
         .route("/api/posts", post(create_post))
         .route("/api/posts/{id}", put(update_post).delete(delete_post))
         .route("/api/notebook", get(notebook))
@@ -533,6 +618,15 @@ fn app(state: Arc<AppState>) -> Router {
             "/api/notebook/{page_number}",
             put(save_bookmark).delete(remove_bookmark),
         )
+        .route(
+            "/api/me/message-preferences",
+            get(messaging::my_preferences).put(messaging::update_preferences),
+        )
+        .route("/api/messages", post(messaging::send))
+        .route("/api/messages/inbox", get(messaging::inbox))
+        .route("/api/messages/sent", get(messaging::sent))
+        .route("/api/messages/{id}", get(messaging::detail))
+        .route("/api/messages/{id}/read", post(messaging::mark_read))
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)
@@ -700,6 +794,254 @@ mod tests {
         assert_eq!(legacy, "Legacy fixture");
         assert_eq!(real, "Existing User");
         assert_eq!(min_posts_per_author, 4);
+    }
+
+    #[tokio::test]
+    async fn search_finds_seeded_cyrillic_texts_and_catalog_authors() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        seed::seed_demo(&pool).await.unwrap();
+        let app = app(Arc::new(AppState { pool }));
+
+        let (status, authors) = call(&app, Method::GET, "/api/catalog/authors", None, None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(authors.as_array().unwrap().len(), 10);
+        assert!(
+            authors
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|author| author["postCount"] == 4)
+        );
+
+        let (status, hits) = call(
+            &app,
+            Method::GET,
+            "/api/search?q=%D0%9B%D0%90%D0%92%D0%90%D0%9D%D0%94%D0%90",
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(
+            hits.as_array()
+                .unwrap()
+                .iter()
+                .any(|hit| hit["pageNumber"] == 314)
+        );
+
+        let (status, hits) =
+            call(&app, Method::GET, "/api/search?q=%22OR%22%3A*", None, None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(hits.is_array());
+    }
+
+    #[tokio::test]
+    async fn search_index_updates_when_posts_change_or_are_deleted() {
+        let app = test_app().await;
+        let user = signup(&app, "Author", "search-author@example.test").await;
+        let token = user["token"].as_str().unwrap();
+        let page_number = user["user"]["pageNumber"].as_i64().unwrap();
+        let (status, post) = call(
+            &app,
+            Method::POST,
+            "/api/posts",
+            Some(token),
+            Some(json!({"title": "First report", "content": "Battery repairs and spare parts"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let post_id = post["id"].as_i64().unwrap();
+
+        let (status, hits) = call(&app, Method::GET, "/api/search?q=BATTERY", None, None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(hits[0]["pageNumber"], page_number);
+        assert_eq!(hits[0]["postId"], post_id);
+
+        let (status, _) = call(
+            &app,
+            Method::PUT,
+            &format!("/api/posts/{post_id}"),
+            Some(token),
+            Some(json!({"title": "Second report", "content": "Solar panels and house wiring"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let (_, old_hits) = call(&app, Method::GET, "/api/search?q=battery", None, None).await;
+        let (_, new_hits) = call(&app, Method::GET, "/api/search?q=solar", None, None).await;
+        assert_eq!(old_hits.as_array().unwrap().len(), 0);
+        assert_eq!(new_hits.as_array().unwrap().len(), 1);
+
+        let (status, _) = call(
+            &app,
+            Method::DELETE,
+            &format!("/api/posts/{post_id}"),
+            Some(token),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let (_, remaining) = call(&app, Method::GET, "/api/search?q=solar", None, None).await;
+        assert_eq!(remaining.as_array().unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn message_restrictions_privacy_and_self_delivery() {
+        let app = test_app().await;
+        let alice = signup(&app, "Alice", "messages-alice@example.test").await;
+        let bob = signup(&app, "Bob", "messages-bob@example.test").await;
+        let outsider = signup(&app, "Charlie", "messages-charlie@example.test").await;
+        let alice_token = alice["token"].as_str().unwrap();
+        let bob_token = bob["token"].as_str().unwrap();
+        let outsider_token = outsider["token"].as_str().unwrap();
+        let bob_number = bob["user"]["pageNumber"].as_i64().unwrap();
+
+        let (status, settings) = call(
+            &app,
+            Method::PUT,
+            "/api/me/message-preferences",
+            Some(bob_token),
+            Some(json!({"simple":false,"thought":true,"letter":false})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(settings["simple"], false);
+        let (status, options) = call(
+            &app,
+            Method::GET,
+            &format!("/api/pages/{bob_number}/message-options"),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(options["acceptedTypes"]["letter"], false);
+
+        let (status, _) = call(
+            &app,
+            Method::POST,
+            "/api/messages",
+            Some(alice_token),
+            Some(
+                json!({"recipientPageNumber":bob_number,"kind":"simple","content":"x".repeat(200)}),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+
+        let (status, thought) = call(
+            &app,
+            Method::POST,
+            "/api/messages",
+            Some(alice_token),
+            Some(json!({"recipientPageNumber":bob_number,"kind":"thought","content":"Мысль ".repeat(100)})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let thought_id = thought["id"].as_i64().unwrap();
+
+        let (status, own_message) = call(
+            &app,
+            Method::POST,
+            "/api/messages",
+            Some(bob_token),
+            Some(
+                json!({"recipientPageNumber":bob_number,"kind":"simple","content":"x".repeat(200)}),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(own_message["senderPageNumber"], bob_number);
+        assert_eq!(own_message["recipientPageNumber"], bob_number);
+
+        let (_, inbox) = call(
+            &app,
+            Method::GET,
+            "/api/messages/inbox",
+            Some(bob_token),
+            None,
+        )
+        .await;
+        let (_, sent) = call(
+            &app,
+            Method::GET,
+            "/api/messages/sent",
+            Some(bob_token),
+            None,
+        )
+        .await;
+        assert_eq!(inbox.as_array().unwrap().len(), 2);
+        assert_eq!(sent.as_array().unwrap().len(), 1);
+        let (status, _) = call(
+            &app,
+            Method::GET,
+            &format!("/api/messages/{thought_id}"),
+            Some(outsider_token),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        let (status, _) = call(
+            &app,
+            Method::POST,
+            &format!("/api/messages/{thought_id}/read"),
+            Some(alice_token),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        let (status, _) = call(
+            &app,
+            Method::POST,
+            &format!("/api/messages/{thought_id}/read"),
+            Some(bob_token),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let (_, details) = call(
+            &app,
+            Method::GET,
+            &format!("/api/messages/{thought_id}"),
+            Some(alice_token),
+            None,
+        )
+        .await;
+        assert!(details["readAt"].is_string());
+    }
+
+    #[tokio::test]
+    async fn each_message_type_has_an_enforced_minimum_length() {
+        let app = test_app().await;
+        let user = signup(&app, "Author", "limits@example.test").await;
+        let token = user["token"].as_str().unwrap();
+        let number = user["user"]["pageNumber"].as_i64().unwrap();
+        for (kind, minimum) in [("simple", 200), ("thought", 500), ("letter", 1800)] {
+            let (status, _) = call(
+                &app,
+                Method::POST,
+                "/api/messages",
+                Some(token),
+                Some(json!({"recipientPageNumber":number,"kind":kind,"content":"x".repeat(minimum - 1)})),
+            )
+            .await;
+            assert_eq!(status, StatusCode::BAD_REQUEST);
+
+            let (status, message) = call(
+                &app,
+                Method::POST,
+                "/api/messages",
+                Some(token),
+                Some(json!({"recipientPageNumber":number,"kind":kind,"subject":"Test","content":"x".repeat(minimum)})),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(message["kind"], kind);
+        }
     }
 
     #[tokio::test]

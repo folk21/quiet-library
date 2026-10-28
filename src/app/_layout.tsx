@@ -14,6 +14,8 @@ export default function RootLayout() {
         <Stack.Screen name="page/[number]" />
         <Stack.Screen name="auth" options={{ presentation: 'modal' }} />
         <Stack.Screen name="write" />
+        <Stack.Screen name="message/compose" />
+        <Stack.Screen name="message/[id]" />
       </Stack>
     </SessionProvider>
   </SafeAreaProvider>;

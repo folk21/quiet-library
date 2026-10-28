@@ -1,5 +1,5 @@
 import { demo } from './demo';
-import type { AuthResponse, Bookmark, CatalogStats, LibraryPage, Post, User } from './types';
+import type { AuthResponse, Bookmark, CatalogAuthor, CatalogStats, LibraryPage, MessageDetails, MessagePreferences, MessageRecipientOptions, MessageSummary, Post, SearchHit, SendMessageInput, User } from './types';
 
 export const isDemoMode = process.env.EXPO_PUBLIC_DEMO_MODE !== 'false';
 const baseUrl = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
@@ -25,6 +25,8 @@ async function request<T>(path: string, token?: string | null, init?: RequestIni
 
 export const api = {
   stats: (): Promise<CatalogStats> => isDemoMode ? demo.stats() : request('/api/catalog/stats'),
+  catalogAuthors: (): Promise<CatalogAuthor[]> => isDemoMode ? demo.catalogAuthors() : request('/api/catalog/authors'),
+  search: (query: string): Promise<SearchHit[]> => isDemoMode ? demo.search(query) : request(`/api/search?q=${encodeURIComponent(query)}`),
   getPage: (number: number): Promise<LibraryPage> => isDemoMode ? demo.getPage(number) : request(`/api/pages/${number}`),
   randomPage: (): Promise<LibraryPage> => isDemoMode ? demo.randomPage() : request('/api/pages/random'),
   register: (input: { displayName: string; email: string; password: string }): Promise<AuthResponse> =>
@@ -44,4 +46,20 @@ export const api = {
     isDemoMode ? demo.updatePost(token, id, title, content) : request(`/api/posts/${id}`, token, { method: 'PUT', body: JSON.stringify({ title, content }) }),
   deletePost: (token: string, id: number): Promise<void> =>
     isDemoMode ? demo.deletePost(token, id) : request(`/api/posts/${id}`, token, { method: 'DELETE' }),
+  messageOptions: (number: number): Promise<MessageRecipientOptions> =>
+    isDemoMode ? demo.messageOptions(number) : request(`/api/pages/${number}/message-options`),
+  messagePreferences: (token: string): Promise<MessagePreferences> =>
+    isDemoMode ? demo.messagePreferences(token) : request('/api/me/message-preferences', token),
+  updateMessagePreferences: (token: string, preferences: MessagePreferences): Promise<MessagePreferences> =>
+    isDemoMode ? demo.updateMessagePreferences(token, preferences) : request('/api/me/message-preferences', token, { method: 'PUT', body: JSON.stringify(preferences) }),
+  inbox: (token: string): Promise<MessageSummary[]> =>
+    isDemoMode ? demo.inbox(token) : request('/api/messages/inbox', token),
+  sent: (token: string): Promise<MessageSummary[]> =>
+    isDemoMode ? demo.sent(token) : request('/api/messages/sent', token),
+  getMessage: (token: string, id: number): Promise<MessageDetails> =>
+    isDemoMode ? demo.getMessage(token, id) : request(`/api/messages/${id}`, token),
+  sendMessage: (token: string, input: SendMessageInput): Promise<MessageDetails> =>
+    isDemoMode ? demo.sendMessage(token, input) : request('/api/messages', token, { method: 'POST', body: JSON.stringify(input) }),
+  markMessageRead: (token: string, id: number): Promise<void> =>
+    isDemoMode ? demo.markMessageRead(token, id) : request(`/api/messages/${id}/read`, token, { method: 'POST' }),
 };
